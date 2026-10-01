@@ -631,6 +631,7 @@ void opcontrol() {
 
     }
 
+<<<<<<< HEAD
  double current_distance = distance_sensor.get();
 
     static bool auto_has_fired = false;
@@ -676,6 +677,8 @@ void opcontrol() {
         auto_has_fired = false;
         driver_overrode = false;
     }
+=======
+>>>>>>> origin/main
 
 
     
