@@ -54,6 +54,7 @@ int target = 0;
 
 bool highGoalMode = false;  // toggled by L2
 bool pistonClamped = false;  // toggled by L1
+bool auto_clamp_enabled = false;
 
 //For the controler screen
 bool last_clamped_state = false;
@@ -266,6 +267,50 @@ void wait_for_score_finish() {
     pros::delay(10);
     waited += 10;
   }
+}
+
+// the autoclaw stuff
+void update_auto_clamp(bool auto_clamp_enabled) {
+    double current_distance = distance_sensor.get();
+
+    static bool auto_has_fired = false;
+    static bool driver_overrode = false;
+    static bool initial_check_done = false;
+
+    // speed limiting logic
+    int throttle = master.get_analog(pros::E_CONTROLLER_ANALOG_RIGHT_Y); 
+    double current_speed_effort = abs(throttle); 
+
+    // Dynamic threshold based on speed
+    double dynamic_threshold = 30.0 + (current_speed_effort / 127.0) * 20.0;
+    bool object_detected = (current_distance > 0 && current_distance < dynamic_threshold);
+
+    // Startup safety: don't auto-clamp if a pin is already loaded on boot
+    if (!initial_check_done) {
+        if (object_detected) {
+            auto_has_fired = true;
+        }
+        initial_check_done = true;
+    }
+
+    // 1. MANUAL L1 CONTROL
+    if (master.get_digital_new_press(pros::E_CONTROLLER_DIGITAL_L1)) {
+        pistonClamped = !pistonClamped;    
+        piston.set(pistonClamped);         
+        driver_overrode = true;            
+    }
+    // 2. AUTO-CLAMP LOGIC
+    else if (auto_clamp_enabled && object_detected && !auto_has_fired && !driver_overrode) {
+        pistonClamped = true;              
+        piston.set(false); 
+        auto_has_fired = true;             
+    }
+
+    // 3. RESET WHEN PIN IS REMOVED
+    if (current_distance > 40 || current_distance == 0 || current_distance == 9999) {
+        auto_has_fired = false;
+        driver_overrode = false;
+    }
 }
 
 
@@ -613,7 +658,11 @@ void opcontrol() {
    
     }
 
-
+    else if (master.get_digital_new_press(pros::E_CONTROLLER_DIGITAL_LEFT)) {
+     
+      auto_clamp_enabled = !auto_clamp_enabled;
+   
+    }
 
 
 
@@ -631,58 +680,13 @@ void opcontrol() {
 
     }
 
- double current_distance = distance_sensor.get();
-
-    static bool auto_has_fired = false;
-    static bool driver_overrode = false;
-    static bool initial_check_done = false;
-
-    // ==========================================
-    // DYNAMIC SPEED & THRESHOLD (VIA JOYSTICK)
-    // ==========================================
-    // Read joystick throttle (Change to ANALOG_LEFT_Y if your drive is on the left stick)
-    int throttle = master.get_analog(pros::E_CONTROLLER_ANALOG_RIGHT_Y); 
-    double current_speed_effort = abs(throttle); // 0 to 127
-
-    // Base distance is 30mm when stopped. At full stick (127), it scales up to 50mm.
-    double dynamic_threshold = 30.0 + (current_speed_effort / 127.0) * 20.0;
-
-    // Single definition for object detection
-    bool object_detected = (current_distance > 0 && current_distance < dynamic_threshold);
-
-    // Startup safety: if a pin is already inside when code boots up, don't auto-clamp it
-    if (!initial_check_done) {
-        if (object_detected) {
-            auto_has_fired = true;
-        }
-        initial_check_done = true;
-    }
-
-    // 1. MANUAL L1 CONTROL (Absolute Highest Priority)
-    if (master.get_digital_new_press(pros::E_CONTROLLER_DIGITAL_L1)) {
-        pistonClamped = !pistonClamped;    // Toggle your tracking variable
-        piston.set(pistonClamped);         // Send to physical piston
-        driver_overrode = true;            // Block auto-clamp from fighting you
-    }
-    // 2. AUTO-CLAMP LOGIC
-    else if (object_detected && !auto_has_fired && !driver_overrode) {
-        pistonClamped = true;              // Set to clamped state
-        piston.set(false);                 // Trigger physical clamp (using false based on your setup)
-        auto_has_fired = true;             // Lock it so it doesn't spam commands
-    }
-
-    // 3. RESET WHEN PIN IS REMOVED
-    if (current_distance > 40 || current_distance == 0 || current_distance == 9999) {
-        auto_has_fired = false;
-        driver_overrode = false;
-    }
-    
+ 
     
 
 
 
     
-
+  update_auto_clamp(auto_clamp_enabled);
 
     // . . .
     // Put more user control code here!

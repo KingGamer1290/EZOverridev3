@@ -721,3 +721,10 @@ void skills_two() {
 
 
 }
+/* if wanted to call autoclaw in an auton: 
+  while (chassis.pid_is_traveling()) {
+        update_auto_clamp(true);
+        pros::delay(10);
+    }
+
+*/
